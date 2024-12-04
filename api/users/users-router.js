@@ -1,14 +1,21 @@
-const router = require('express').Router()
+const express = require('express');
 
-const Users = require('./users-model.js')
-const { restricted } = require('../auth/auth-middleware.js')
+const router = express.Router();
+
+const {
+  restricted
+} = require('../auth/auth-middleware');
+
+const {
+  find
+} = require('./users-model');
 
 router.get('/', restricted, (req, res, next) => {
-  Users.find()
+  find()
     .then(users => {
-      res.json(users)
+      res.json(users);
     })
-    .catch(next) // our custom err handling middleware will trap this
-})
+    .catch(next)
+});
 
-module.exports = router
+module.exports = router;

@@ -1,57 +1,60 @@
-const router = require('express').Router()
-const bcrypt = require('bcryptjs')
+const express = require('express');
+const bcrypt = require('bcryptjs');
 
-const Users = require('../users/users-model.js')
+const router = express.Router();
 
-// for endpoints beginning with /api/auth
-router.post('/register', (req, res, next) => {
-  let user = req.body
-  const hash = bcrypt.hashSync(user.password, 8) // 2 ^ n
-  user.password = hash
+const {
+  checkUsernameFree,
+  checkUsernameExists,
+  checkPasswordLength,
+} = require('./auth-middleware');
 
-  Users.add(user)
-    .then(saved => {
-      res.status(201).json({
-        message: `Great to have you with us, ${saved.username}`
-      })
-    })
-    .catch(next) // our custom err handling middleware will trap this
-})
+const {
+  add
+} = require('../users/users-model');
 
-router.post('/login', (req, res, next) => {
-  let { username, password } = req.body
+router.post('/register',
+  checkUsernameFree,
+  checkPasswordLength,
+  async (req, res, next) => {
+    try {
+      const { username, password } = req.body;
+      const hash = bcrypt.hashSync(password, 8);
+      const newUser = { username, password: hash };
+      const result = await add(newUser);
+      res.status(201).json(result);
+    } catch (err) {
+      next(err)
+    }
+  }
+);
 
-  Users.findBy({ username })
-    .first()
-    .then(user => {
-      if (user && bcrypt.compareSync(password, user.password)) {
-        // this is the critical line. Session saved, cookie set on client:
-        req.session.user = user
-        res.status(200).json({
-          message: `Welcome back ${user.username}, have a cookie!`,
-        })
-      } else {
-        next({ status: 401, message: 'Invalid Credentials' })
-      }
-    })
-    .catch(next)
-})
+router.post('/login', checkUsernameExists, (req, res, next) => {
+  try {
+    const { password, user } = req.body;
+    if (bcrypt.compareSync(password, user.password)) {
+      req.session.user = user;
+      res.json({ message: `Welcome ${user.username}` })
+    } else {
+      next({ status: 401, message: 'Invalid credentials' });
+    }
+  } catch (err) {
+    next(err);
+  }
+});
 
-router.get('/logout', (req, res) => {
+router.get('/logout', (req, res, next) => {
   if (req.session.user) {
-    const { username } = req.session.user
     req.session.destroy(err => {
       if (err) {
-        res.json({ message: `You can never leave, ${username}...` })
+        next(err)
       } else {
-        // the following line is optional: compliant browsers will delete the cookie from their storage
-        res.set('Set-Cookie', 'monkey=; SameSite=Strict; Path=/; Expires=Thu, 01 Jan 1970 00:00:00')
-        res.json({ message: `Bye ${username}, thanks for playing` })
+        res.json({ message: 'logged out' })
       }
     })
   } else {
-    res.json({ message: 'Excuse me, do I know you?' })
+    res.json({ message: 'no session' });
   }
-})
+});
 
-module.exports = router
+module.exports = router;

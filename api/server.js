@@ -1,63 +1,46 @@
-const path = require('path')
-const express = require('express')
-const session = require('express-session')
-const KnexSessionStore = require('connect-session-knex')(session)
+const express = require("express");
+const helmet = require("helmet");
+const cors = require("cors");
+const session = require('express-session');
+const { ConnectSessionKnexStore } = require('connect-session-knex');
+const usersRouter = require('./users/users-router');
+const authRouter = require('./auth/auth-router');
 
-const authRouter = require('./auth/auth-router.js')
-const usersRouter = require('./users/users-router.js')
+const server = express();
 
-const server = express()
-
-const sessionConfig = {
-  name: 'monkey',
-  secret: 'keep it secret, keep it safe!',
+server.use(helmet());
+server.use(express.json());
+server.use(cors());
+server.use(session({
+  name: 'chocolatechip',
+  secret: process.env.SECRET_KEY || 'this is a secret',
   cookie: {
     maxAge: 1000 * 60 * 60,
-    secure: false, // if true the cookie is not set unless it's an https connection
-    httpOnly: false, // if true the cookie is not accessible through document.cookie
+    secure: false,
+    httpOnly: false,
   },
   rolling: true,
-  resave: false, // some data stores need this set to true
-  saveUninitialized: false, // privacy implications, if false no cookie is set on client unless the req.session is changed
-  store: new KnexSessionStore({
-    knex: require('../database/db-config.js'), // configured instance of knex
-    tablename: 'sessions', // table that will store sessions inside the db, name it anything you want
-    sidfieldname: 'sid', // column that will hold the session id, name it anything you want
-    createtable: true, // if the table does not exist, it will create it automatically
-    clearInterval: 1000 * 60 * 60, // time it takes to check for old sessions and remove them from the database to keep it clean and performant
-  }),
-}
+  resave: true,
+  saveUninitialized: false,
+  store: new ConnectSessionKnexStore({
+    knex: require('../data/db-config'),
+    createTable: true,
+    clearInterval: 1000 * 60 * 60,
+  })
+}));
 
-server.use(express.static(path.join(__dirname, '../client')))
-server.use(session(sessionConfig))
-server.use(express.json())
+server.use('/api/users', usersRouter);
+server.use('/api/auth', authRouter);
 
-server.use('/api/auth', authRouter)
-server.use('/api/users', usersRouter)
-
-server.get('/', (req, res) => {
-  res.sendFile(path.join(__dirname, '../client', 'index.html'))
-})
-
-server.get('/hello', (req, res) => {
-  // time allowing this can be used to discuss cookies
-  if (req.headers.cookie) {
-    res.send(`<h1>hello, friend</h1>`)
-  } else {
-    res.set('Set-Cookie', `friend=yes; Max-Age=100000;`)
-    res.send(`<h1>This is the first time</h1>`)
-  }
-})
-
-server.use('*', (req, res, next) => {
-  next({ status: 404, message: 'Not found!' })
-})
+server.get("/", (req, res) => { 
+  res.json({ api: "up" });
+});
 
 server.use((err, req, res, next) => { // eslint-disable-line
   res.status(err.status || 500).json({
     message: err.message,
     stack: err.stack,
-  })
-})
+  });
+});
 
-module.exports = server
+module.exports = server;
